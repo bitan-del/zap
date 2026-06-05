@@ -1717,8 +1717,8 @@ fn run_antigravity_mode_at(base_dir: &Path, ctx: InitContext) -> Result<()> {
 
 // ─── Hermes support ────────────────────────────────────────────
 
-const HERMES_PLUGIN_INIT: &str = include_str!("../../hooks/hermes/rtk-rewrite/__init__.py");
-const HERMES_PLUGIN_YAML: &str = include_str!("../../hooks/hermes/rtk-rewrite/plugin.yaml");
+const HERMES_PLUGIN_INIT: &str = include_str!("../../hooks/hermes/zap-rewrite/__init__.py");
+const HERMES_PLUGIN_YAML: &str = include_str!("../../hooks/hermes/zap-rewrite/plugin.yaml");
 
 pub fn run_hermes_mode(ctx: InitContext) -> Result<()> {
     let hermes_home = resolve_hermes_home()?;
@@ -1766,10 +1766,10 @@ fn run_hermes_mode_at(hermes_home: &Path, ctx: InitContext) -> Result<()> {
     if dry_run {
         print_dry_run_footer();
     } else {
-        println!("\nRTK configured for Hermes.\n");
+        println!("\nZAP configured for Hermes.\n");
         println!("  Plugin: {}", plugin_dir.display());
         println!("  Config: {}", config_path.display());
-        println!("  Hermes will now rewrite terminal commands through rtk.");
+        println!("  Hermes will now rewrite terminal commands through zap.");
         println!("  Restart Hermes. Test with: git status\n");
     }
 
@@ -1782,12 +1782,12 @@ pub fn uninstall_hermes(ctx: InitContext) -> Result<()> {
     let removed = uninstall_hermes_at(&hermes_home, ctx)?;
 
     if removed.is_empty() {
-        println!("RTK Hermes support was not installed (nothing to remove)");
+        println!("ZAP Hermes support was not installed (nothing to remove)");
     } else {
         let header = if dry_run {
-            "[dry-run] would uninstall RTK for Hermes CLI:"
+            "[dry-run] would uninstall ZAP for Hermes CLI:"
         } else {
-            "RTK uninstalled for Hermes CLI:"
+            "ZAP uninstalled for Hermes CLI:"
         };
         println!("{}", header);
         for item in removed {
@@ -1814,7 +1814,7 @@ fn uninstall_hermes_at(hermes_home: &Path, ctx: InitContext) -> Result<Vec<Strin
                 plugin_dir.display()
             );
         } else {
-            // nosemgrep: filesystem-deletion -- uninstall intentionally removes only RTK's Hermes plugin directory.
+            // nosemgrep: filesystem-deletion -- uninstall intentionally removes only ZAP's Hermes plugin directory.
             fs::remove_dir_all(&plugin_dir).with_context(|| {
                 format!(
                     "Failed to remove Hermes plugin directory: {}",
@@ -1851,7 +1851,7 @@ fn uninstall_hermes_at(hermes_home: &Path, ctx: InitContext) -> Result<Vec<Strin
                     eprintln!("Updated Hermes config: {}", config_path.display());
                 }
             }
-            removed.push("Hermes config: removed RTK plugin entry".to_string());
+            removed.push("Hermes config: removed ZAP plugin entry".to_string());
         }
     }
 
@@ -4236,7 +4236,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         run_hermes_mode_at(temp.path(), InitContext::default()).unwrap();
 
-        let plugin_dir = temp.path().join("plugins/rtk-rewrite");
+        let plugin_dir = temp.path().join("plugins/zap-rewrite");
         let init_path = plugin_dir.join("__init__.py");
         let manifest_path = plugin_dir.join("plugin.yaml");
         let config_path = temp.path().join("config.yaml");
@@ -4245,17 +4245,17 @@ mod tests {
         assert!(manifest_path.exists(), "Plugin manifest should be created");
         assert_eq!(
             fs::read_to_string(&init_path).unwrap(),
-            include_str!("../../hooks/hermes/rtk-rewrite/__init__.py")
+            include_str!("../../hooks/hermes/zap-rewrite/__init__.py")
         );
         assert_eq!(
             fs::read_to_string(&manifest_path).unwrap(),
-            include_str!("../../hooks/hermes/rtk-rewrite/plugin.yaml")
+            include_str!("../../hooks/hermes/zap-rewrite/plugin.yaml")
         );
 
         let config = fs::read_to_string(&config_path).unwrap();
         assert!(config.contains("plugins:\n"));
         assert!(config.contains("  enabled:\n"));
-        assert_eq!(config.matches("rtk-rewrite").count(), 1);
+        assert_eq!(config.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4278,7 +4278,7 @@ mod tests {
         assert!(first.contains("    - existing-plugin\n"));
         assert!(first.contains("  search_path: ./plugins\n"));
         assert!(first.contains("other: true\n"));
-        assert_eq!(first.matches("rtk-rewrite").count(), 1);
+        assert_eq!(first.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4296,13 +4296,13 @@ mod tests {
         run_hermes_mode_at(temp.path(), InitContext::default()).unwrap();
         let second = fs::read_to_string(&config_path).unwrap();
 
-        let expected = "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - rtk-rewrite\n search_path: ./plugins\nother: true\n";
+        let expected = "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - zap-rewrite\n search_path: ./plugins\nother: true\n";
         assert_eq!(first, expected);
         assert_eq!(
             second, expected,
             "Hermes PyYAML config patch should be idempotent"
         );
-        assert_eq!(first.matches("rtk-rewrite").count(), 1);
+        assert_eq!(first.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4327,10 +4327,10 @@ mod tests {
         run_hermes_mode_at(hermes_home, InitContext::default()).unwrap();
         let second = fs::read_to_string(&config_path).unwrap();
 
-        let installed = "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n search_path: ./plugins\n enabled:\n - rtk-rewrite\nother: true\n";
+        let installed = "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n search_path: ./plugins\n enabled:\n - zap-rewrite\nother: true\n";
         assert_eq!(first, installed);
         assert_eq!(second, installed);
-        assert_eq!(first.matches("rtk-rewrite").count(), 1);
+        assert_eq!(first.matches("zap-rewrite").count(), 1);
         assert!(plugin_dir.exists());
         assert_eq!(fs::read_to_string(&other_plugin_file).unwrap(), "keep");
 
@@ -4350,7 +4350,7 @@ mod tests {
         );
         assert!(!uninstalled.contains("\n - \n"));
         assert!(!uninstalled.contains("\n -\n"));
-        assert_eq!(uninstalled.matches("rtk-rewrite").count(), 0);
+        assert_eq!(uninstalled.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
@@ -4369,7 +4369,7 @@ mod tests {
         fs::write(&other_plugin_file, "keep").unwrap();
         fs::write(
             &config_path,
-            "theme: dark\nplugins:\n  enabled:\n    - existing-plugin\n    - rtk-rewrite\n  search_path: ./plugins\nother: true\n",
+            "theme: dark\nplugins:\n  enabled:\n    - existing-plugin\n    - zap-rewrite\n  search_path: ./plugins\nother: true\n",
         )
         .unwrap();
 
@@ -4387,7 +4387,7 @@ mod tests {
         assert!(config.contains("    - existing-plugin\n"));
         assert!(config.contains("  search_path: ./plugins\n"));
         assert!(config.contains("other: true\n"));
-        assert_eq!(config.matches("rtk-rewrite").count(), 0);
+        assert_eq!(config.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
@@ -4406,7 +4406,7 @@ mod tests {
         fs::write(&other_plugin_file, "keep").unwrap();
         fs::write(
             &config_path,
-            "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - rtk-rewrite\n search_path: ./plugins\nother: true\n",
+            "theme: dark\nplugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - zap-rewrite\n search_path: ./plugins\nother: true\n",
         )
         .unwrap();
 
@@ -4426,7 +4426,7 @@ mod tests {
         );
         assert!(!config.contains("\n - \n"));
         assert!(!config.contains("\n -\n"));
-        assert_eq!(config.matches("rtk-rewrite").count(), 0);
+        assert_eq!(config.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
@@ -4451,18 +4451,18 @@ mod tests {
         assert!(patched.contains("theme: dark\n"));
         assert!(patched.contains("plugins:\n"));
         assert!(patched.contains("  search_path: ./plugins\n"));
-        assert!(patched.contains("  enabled:\n    - rtk-rewrite\n"));
+        assert!(patched.contains("  enabled:\n    - zap-rewrite\n"));
         assert!(patched.contains("other: true\n"));
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
     fn test_hermes_config_patch_removes_duplicate_rtk_rewrite() {
-        let existing = "plugins:\n  enabled:\n    - rtk-rewrite\n    - other\n    - rtk-rewrite\n";
+        let existing = "plugins:\n  enabled:\n    - zap-rewrite\n    - other\n    - zap-rewrite\n";
         let patched = patch_hermes_config(existing);
 
         assert!(patched.contains("    - other\n"));
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4474,9 +4474,9 @@ mod tests {
 
         assert_eq!(
             patched,
-            "plugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - rtk-rewrite\n"
+            "plugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - zap-rewrite\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4485,8 +4485,8 @@ mod tests {
 
         let patched = patch_hermes_config(existing);
 
-        assert_eq!(patched, "plugins:\n  enabled:\n  - foo\n  - rtk-rewrite\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched, "plugins:\n  enabled:\n  - foo\n  - zap-rewrite\n");
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4498,9 +4498,9 @@ mod tests {
 
         assert_eq!(
             patched,
-            "plugins:\n disabled:\n - google_meet\n - spotify\n search_path: ./plugins\n enabled:\n - rtk-rewrite\n"
+            "plugins:\n disabled:\n - google_meet\n - spotify\n search_path: ./plugins\n enabled:\n - zap-rewrite\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4512,10 +4512,10 @@ mod tests {
 
         assert_eq!(
             patched_once,
-            "plugins:\n enabled:\n - disk-cleanup\n - rtk-rewrite\n disabled:\n - spotify\n"
+            "plugins:\n enabled:\n - disk-cleanup\n - zap-rewrite\n disabled:\n - spotify\n"
         );
         assert_eq!(patched_twice, patched_once);
-        assert_eq!(patched_once.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched_once.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4526,9 +4526,9 @@ mod tests {
 
         assert_eq!(
             patched,
-            "plugins:\n enabled:\n - disk-cleanup\n - rtk-rewrite\n"
+            "plugins:\n enabled:\n - disk-cleanup\n - zap-rewrite\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4539,9 +4539,9 @@ mod tests {
 
         assert_eq!(
             patched,
-            "plugins:\n  enabled:\n    - existing-plugin\n    - rtk-rewrite\n"
+            "plugins:\n  enabled:\n    - existing-plugin\n    - zap-rewrite\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4552,9 +4552,9 @@ mod tests {
 
         assert_eq!(
             patched,
-            "plugins:\n  search_path: ./plugins\n  enabled:\n    - rtk-rewrite\n"
+            "plugins:\n  search_path: ./plugins\n  enabled:\n    - zap-rewrite\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4563,30 +4563,30 @@ mod tests {
 
         let patched = patch_hermes_config(existing);
 
-        assert_eq!(patched, "plugins:\n  enabled:\n    - rtk-rewrite\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched, "plugins:\n  enabled:\n    - zap-rewrite\n");
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
     fn test_hermes_config_patch_inline_enabled_is_idempotent() {
-        let existing = "theme: dark\nplugins:\n  enabled: [existing-plugin, rtk-rewrite] # keep\n  search_path: ./plugins\nother: true\n";
+        let existing = "theme: dark\nplugins:\n  enabled: [existing-plugin, zap-rewrite] # keep\n  search_path: ./plugins\nother: true\n";
 
         let patched = patch_hermes_config(existing);
 
         assert_eq!(patched, existing);
         assert_eq!(patch_hermes_config(&patched), patched);
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
     fn test_hermes_config_patch_inline_enabled_without_final_newline_is_idempotent() {
-        let existing = "plugins:\n  enabled: [existing-plugin, rtk-rewrite]";
+        let existing = "plugins:\n  enabled: [existing-plugin, zap-rewrite]";
 
         let patched = patch_hermes_config(existing);
 
         assert_eq!(patched, existing);
         assert_eq!(patch_hermes_config(&patched), patched);
-        assert_eq!(patched.matches("rtk-rewrite").count(), 1);
+        assert_eq!(patched.matches("zap-rewrite").count(), 1);
     }
 
     #[test]
@@ -4600,7 +4600,7 @@ mod tests {
 
     #[test]
     fn test_hermes_config_unpatch_inline_enabled_preserves_unrelated_entries() {
-        let existing = "theme: dark\nplugins:\n  enabled: [alpha, rtk-rewrite, beta] # keep comment\n  search_path: ./plugins\nother: true\n";
+        let existing = "theme: dark\nplugins:\n  enabled: [alpha, zap-rewrite, beta] # keep comment\n  search_path: ./plugins\nother: true\n";
 
         let patched = unpatch_hermes_config(existing);
 
@@ -4608,42 +4608,42 @@ mod tests {
             patched,
             "theme: dark\nplugins:\n  enabled: [alpha, beta] # keep comment\n  search_path: ./plugins\nother: true\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_inline_enabled_final_line_without_newline() {
-        let existing = "plugins:\n  enabled: [existing-plugin, rtk-rewrite]";
+        let existing = "plugins:\n  enabled: [existing-plugin, zap-rewrite]";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n  enabled: [existing-plugin]");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_removes_duplicate_inline_rtk_rewrite() {
-        let existing = "plugins:\n  enabled: [alpha, rtk-rewrite, beta, rtk-rewrite]\n";
+        let existing = "plugins:\n  enabled: [alpha, zap-rewrite, beta, zap-rewrite]\n";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n  enabled: [alpha, beta]\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_removes_duplicate_block_rtk_rewrite() {
-        let existing = "plugins:\n  enabled:\n    - rtk-rewrite\n    - other\n    - rtk-rewrite\n";
+        let existing = "plugins:\n  enabled:\n    - zap-rewrite\n    - other\n    - zap-rewrite\n";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n  enabled:\n    - other\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_pyyaml_indentationless_enabled_list() {
-        let existing = "plugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - rtk-rewrite\n search_path: ./plugins\n";
+        let existing = "plugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n - zap-rewrite\n search_path: ./plugins\n";
 
         let patched = unpatch_hermes_config(existing);
 
@@ -4651,27 +4651,27 @@ mod tests {
             patched,
             "plugins:\n disabled:\n - google_meet\n - spotify\n enabled:\n - disk-cleanup\n search_path: ./plugins\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_pyyaml_indentationless_only_rtk_collapses_to_empty() {
-        let existing = "plugins:\n enabled:\n - rtk-rewrite\n search_path: ./plugins\n";
+        let existing = "plugins:\n enabled:\n - zap-rewrite\n search_path: ./plugins\n";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n enabled: []\n search_path: ./plugins\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
     fn test_hermes_config_unpatch_block_enabled_final_line_without_newline() {
-        let existing = "plugins:\n  enabled:\n    - existing-plugin\n    - rtk-rewrite";
+        let existing = "plugins:\n  enabled:\n    - existing-plugin\n    - zap-rewrite";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n  enabled:\n    - existing-plugin\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
@@ -4685,7 +4685,7 @@ mod tests {
 
     #[test]
     fn test_hermes_config_unpatch_preserves_quoted_exact_values() {
-        let existing = "plugins:\n  enabled:\n    - 'alpha'\n    - \"rtk-rewrite\"\n    - 'beta'\n  search_path: ./plugins\n";
+        let existing = "plugins:\n  enabled:\n    - 'alpha'\n    - \"zap-rewrite\"\n    - 'beta'\n  search_path: ./plugins\n";
 
         let patched = unpatch_hermes_config(existing);
 
@@ -4693,7 +4693,7 @@ mod tests {
             patched,
             "plugins:\n  enabled:\n    - 'alpha'\n    - 'beta'\n  search_path: ./plugins\n"
         );
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]
@@ -4707,12 +4707,12 @@ mod tests {
 
     #[test]
     fn test_hermes_config_unpatch_collapses_empty_enabled_list() {
-        let existing = "plugins:\n  enabled:\n    - rtk-rewrite\n";
+        let existing = "plugins:\n  enabled:\n    - zap-rewrite\n";
 
         let patched = unpatch_hermes_config(existing);
 
         assert_eq!(patched, "plugins:\n  enabled: []\n");
-        assert_eq!(patched.matches("rtk-rewrite").count(), 0);
+        assert_eq!(patched.matches("zap-rewrite").count(), 0);
     }
 
     #[test]

@@ -35,6 +35,6 @@ pub const PI_CODING_AGENT_DIR_ENV: &str = "PI_CODING_AGENT_DIR";
 
 pub const HERMES_DIR: &str = ".hermes";
 pub const HERMES_PLUGINS_SUBDIR: &str = "plugins";
-pub const HERMES_PLUGIN_NAME: &str = "rtk-rewrite";
+pub const HERMES_PLUGIN_NAME: &str = "zap-rewrite";
 pub const HERMES_PLUGIN_INIT_FILE: &str = "__init__.py";
 pub const HERMES_PLUGIN_MANIFEST_FILE: &str = "plugin.yaml";
