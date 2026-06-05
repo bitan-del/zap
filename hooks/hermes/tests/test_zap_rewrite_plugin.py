@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 
-PLUGIN_PATH = Path(__file__).resolve().parents[1] / "rtk-rewrite" / "__init__.py"
+PLUGIN_PATH = Path(__file__).resolve().parents[1] / "zap-rewrite" / "__init__.py"
 
 
 class FakeContext:
@@ -29,7 +29,7 @@ class FakeCompletedProcess:
         self.stderr = stderr
 
 
-def load_plugin_module(path=PLUGIN_PATH, module_name="rtk_rewrite_plugin"):
+def load_plugin_module(path=PLUGIN_PATH, module_name="zap_rewrite_plugin"):
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Unable to load Hermes plugin from {path}")
@@ -38,43 +38,80 @@ def load_plugin_module(path=PLUGIN_PATH, module_name="rtk_rewrite_plugin"):
     return module
 
 
-def write_fake_rtk(bin_dir):
-    fake_rtk = bin_dir / "rtk"
-    fake_rtk.write_text(
+def write_fake_zap(bin_dir):
+    fake_zap = bin_dir / "zap"
+    fake_zap.write_text(
         "\n".join(
             [
                 f"#!{sys.executable}",
                 "import sys",
                 "if sys.argv[1:] == ['rewrite', 'git status']:",
-                "    print('rtk git status')",
+                "    print('zap git status')",
                 "    raise SystemExit(0)",
-                "print('unexpected rtk args:', sys.argv[1:], file=sys.stderr)",
+                "print('unexpected zap args:', sys.argv[1:], file=sys.stderr)",
                 "raise SystemExit(1)",
                 "",
             ]
         )
     )
-    fake_rtk.chmod(fake_rtk.stat().st_mode | stat.S_IXUSR)
-    return fake_rtk
+    fake_zap.chmod(fake_zap.stat().st_mode | stat.S_IXUSR)
+    return fake_zap
 
 
-class RtkRewritePluginTest(unittest.TestCase):
+def build_isolated_cargo_env(home_path, fake_bin):
+    """Return the minimal environment needed for the installed-flow smoke test.
+
+    Keep the test independent from a contributor's personal shell/session env.
+    In particular, do not copy arbitrary variables such as usernames, local
+    service URLs, agent config paths, or API tokens into the subprocess.
+    """
+    env = {
+        "CARGO_TERM_COLOR": "never",
+        "HOME": str(home_path),
+        "ZAP_TELEMETRY_DISABLED": "1",
+    }
+
+    path_dirs = [str(fake_bin)]
+    for executable in ("cargo", "rustc", "rustup"):
+        executable_path = shutil.which(executable)
+        if executable_path:
+            path_dirs.append(str(Path(executable_path).parent))
+    path_dirs.extend(os.defpath.split(os.pathsep))
+    env["PATH"] = os.pathsep.join(dict.fromkeys(path_dirs))
+
+    for key in ("CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    env.setdefault("RUSTUP_TOOLCHAIN", "stable")
+    return env
+
+
+def safe_process_message(result):
+    stdout_lines = len(result.stdout.splitlines()) if result.stdout else 0
+    stderr_lines = len(result.stderr.splitlines()) if result.stderr else 0
+    return (
+        f"cargo init smoke test failed with exit {result.returncode} "
+        f"(stdout lines: {stdout_lines}, stderr lines: {stderr_lines})"
+    )
+
+
+class ZapRewritePluginTest(unittest.TestCase):
     def load_callback(self):
         module = load_plugin_module()
-        module._rtk_available = None
-        module._rtk_missing_warned = False
+        module._zap_available = None
+        module._zap_missing_warned = False
         ctx = FakeContext()
 
-        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/rtk"):
+        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/zap"):
             module.register(ctx)
 
         self.assertIn("pre_tool_call", ctx.hooks)
         return module, ctx.hooks["pre_tool_call"]
 
-    def test_missing_rtk_skips_registering_pre_tool_call(self):
+    def test_missing_zap_skips_registering_pre_tool_call(self):
         module = load_plugin_module()
-        module._rtk_available = None
-        module._rtk_missing_warned = False
+        module._zap_available = None
+        module._zap_missing_warned = False
         ctx = FakeContext()
 
         with mock.patch.object(module.shutil, "which", return_value=None):
@@ -83,46 +120,46 @@ class RtkRewritePluginTest(unittest.TestCase):
 
         self.assertNotIn("pre_tool_call", ctx.hooks)
         self.assertEqual(
-            "rtk: hermes plugin warning: rtk binary not found in PATH; Hermes hook not registered\n",
+            "zap: hermes plugin warning: zap binary not found in PATH; Hermes hook not registered\n",
             stderr.getvalue(),
         )
 
-    def test_missing_rtk_warns_only_once(self):
+    def test_missing_zap_warns_only_once(self):
         module = load_plugin_module()
-        module._rtk_available = None
-        module._rtk_missing_warned = False
+        module._zap_available = None
+        module._zap_missing_warned = False
 
         with mock.patch.object(module.shutil, "which", return_value=None):
             with mock.patch.object(module.sys, "stderr", new_callable=io.StringIO) as stderr:
-                self.assertFalse(module._check_rtk())
-                self.assertFalse(module._check_rtk())
+                self.assertFalse(module._check_zap())
+                self.assertFalse(module._check_zap())
 
         self.assertEqual(
-            "rtk: hermes plugin warning: rtk binary not found in PATH; Hermes hook not registered\n",
+            "zap: hermes plugin warning: zap binary not found in PATH; Hermes hook not registered\n",
             stderr.getvalue(),
         )
 
-    def test_check_rtk_found_is_quiet(self):
+    def test_check_zap_found_is_quiet(self):
         module = load_plugin_module()
-        module._rtk_available = None
-        module._rtk_missing_warned = False
+        module._zap_available = None
+        module._zap_missing_warned = False
 
-        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/rtk"):
+        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/zap"):
             with mock.patch.object(module.sys, "stderr", new_callable=io.StringIO) as stderr:
-                self.assertTrue(module._check_rtk())
+                self.assertTrue(module._check_zap())
 
         self.assertEqual("", stderr.getvalue())
 
-    def test_check_rtk_caches_result_across_calls(self):
+    def test_check_zap_caches_result_across_calls(self):
         module = load_plugin_module()
-        module._rtk_available = None
-        module._rtk_missing_warned = False
+        module._zap_available = None
+        module._zap_missing_warned = False
 
-        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/rtk") as which:
-            self.assertTrue(module._check_rtk())
-            self.assertTrue(module._check_rtk())
+        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/zap") as which:
+            self.assertTrue(module._check_zap())
+            self.assertTrue(module._check_zap())
 
-        which.assert_called_once_with("rtk")
+        which.assert_called_once_with("zap")
 
     def test_rewrite_success_mutates_same_terminal_args_dict(self):
         module, callback = self.load_callback()
@@ -131,11 +168,11 @@ class RtkRewritePluginTest(unittest.TestCase):
         with mock.patch.object(
             module.subprocess,
             "run",
-            return_value=FakeCompletedProcess(stdout="rtk git status\n"),
+            return_value=FakeCompletedProcess(stdout="zap git status\n"),
         ):
             callback(tool_name="terminal", args=args)
 
-        self.assertEqual({"command": "rtk git status"}, args)
+        self.assertEqual({"command": "zap git status"}, args)
 
     def test_rewrite_returncode_three_mutates_same_terminal_args_dict(self):
         module, callback = self.load_callback()
@@ -144,11 +181,11 @@ class RtkRewritePluginTest(unittest.TestCase):
         with mock.patch.object(
             module.subprocess,
             "run",
-            return_value=FakeCompletedProcess(returncode=3, stdout="rtk git status\n"),
+            return_value=FakeCompletedProcess(returncode=3, stdout="zap git status\n"),
         ):
             callback(tool_name="terminal", args=args)
 
-        self.assertEqual({"command": "rtk git status"}, args)
+        self.assertEqual({"command": "zap git status"}, args)
 
     def test_rewrite_returncode_zero_mutates_when_rewrite_changes_command(self):
         module, callback = self.load_callback()
@@ -157,11 +194,11 @@ class RtkRewritePluginTest(unittest.TestCase):
         with mock.patch.object(
             module.subprocess,
             "run",
-            return_value=FakeCompletedProcess(stdout="rtk git status\n"),
+            return_value=FakeCompletedProcess(stdout="zap git status\n"),
         ):
             callback(tool_name="terminal", args=args)
 
-        self.assertEqual({"command": "rtk git status"}, args)
+        self.assertEqual({"command": "zap git status"}, args)
 
     def test_expected_passthrough_returncodes_do_not_warn_or_mutate(self):
         for returncode in (1, 2):
@@ -174,7 +211,7 @@ class RtkRewritePluginTest(unittest.TestCase):
                     "run",
                     return_value=FakeCompletedProcess(
                         returncode=returncode,
-                        stdout="rtk git status\n",
+                        stdout="zap git status\n",
                         stderr="unexpected stderr",
                     ),
                 ):
@@ -191,25 +228,25 @@ class RtkRewritePluginTest(unittest.TestCase):
         with mock.patch.object(
             module.subprocess,
             "run",
-            return_value=FakeCompletedProcess(returncode=4, stdout="rtk git status\n", stderr="bad news"),
+            return_value=FakeCompletedProcess(returncode=4, stdout="zap git status\n", stderr="bad news"),
         ):
             with mock.patch.object(module.sys, "stderr", new_callable=io.StringIO) as stderr:
                 callback(tool_name="terminal", args=args)
 
         self.assertEqual({"command": "git status"}, args)
-        self.assertEqual("rtk: hermes plugin warning: rtk rewrite failed with exit 4: bad news\n", stderr.getvalue())
+        self.assertEqual("zap: hermes plugin warning: zap rewrite failed with exit 4: bad news\n", stderr.getvalue())
 
     def test_rewrite_timeout_warns_and_preserves_original_command(self):
         module, callback = self.load_callback()
         args = {"command": "git status"}
 
-        timeout = subprocess.TimeoutExpired(cmd=["rtk", "rewrite", "git status"], timeout=2)
+        timeout = subprocess.TimeoutExpired(cmd=["zap", "rewrite", "git status"], timeout=2)
         with mock.patch.object(module.subprocess, "run", side_effect=timeout):
             with mock.patch.object(module.sys, "stderr", new_callable=io.StringIO) as stderr:
                 callback(tool_name="terminal", args=args)
 
         self.assertEqual({"command": "git status"}, args)
-        self.assertEqual("rtk: hermes plugin warning: rtk rewrite timed out\n", stderr.getvalue())
+        self.assertEqual("zap: hermes plugin warning: zap rewrite timed out\n", stderr.getvalue())
 
     def test_file_not_found_preserves_original_command(self):
         module, callback = self.load_callback()
@@ -220,7 +257,7 @@ class RtkRewritePluginTest(unittest.TestCase):
                 callback(tool_name="terminal", args=args)
 
         self.assertEqual({"command": "git status"}, args)
-        self.assertIn("rtk: hermes plugin warning:", stderr.getvalue())
+        self.assertIn("zap: hermes plugin warning:", stderr.getvalue())
 
     def test_unexpected_exception_prints_warning_and_keeps_command(self):
         module, callback = self.load_callback()
@@ -231,7 +268,7 @@ class RtkRewritePluginTest(unittest.TestCase):
                 callback(tool_name="terminal", args=args)
 
         self.assertEqual({"command": "git status"}, args)
-        self.assertEqual("rtk: hermes plugin warning: boom\n", stderr.getvalue())
+        self.assertEqual("zap: hermes plugin warning: boom\n", stderr.getvalue())
 
     def test_non_terminal_tool_is_noop(self):
         module, callback = self.load_callback()
@@ -291,29 +328,16 @@ class RtkRewritePluginTest(unittest.TestCase):
                 self.assertEqual({"command": "git status"}, args)
 
 
-class InstalledRtkRewritePluginTest(unittest.TestCase):
+class InstalledZapRewritePluginTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("cargo"), "cargo is required for installed flow")
-    def test_cargo_init_installs_importable_plugin_that_rewrites_with_fake_rtk(self):
+    def test_cargo_init_installs_importable_plugin_that_rewrites_with_fake_zap(self):
         repo_root = Path(__file__).resolve().parents[3]
         self.assertTrue((repo_root / "Cargo.toml").exists(), "repo_root must point at the repository root")
-        real_home = Path(os.path.expanduser("~"))
-
         with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as bin_dir:
             home_path = Path(home)
             fake_bin = Path(bin_dir)
-            write_fake_rtk(fake_bin)
-
-            env = os.environ.copy()
-            env["HOME"] = str(home_path)
-            env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
-            env["RTK_TELEMETRY_DISABLED"] = "1"
-            env["CARGO_TERM_COLOR"] = "never"
-            env.setdefault("RUSTUP_TOOLCHAIN", "stable")
-            if "RUSTUP_HOME" not in env and (real_home / ".rustup").exists():
-                env["RUSTUP_HOME"] = str(real_home / ".rustup")
-            if "CARGO_HOME" not in env and (real_home / ".cargo").exists():
-                env["CARGO_HOME"] = str(real_home / ".cargo")
-            env.pop("RTK_CLAUDE_DIR", None)
+            write_fake_zap(fake_bin)
+            env = build_isolated_cargo_env(home_path, fake_bin)
 
             result = subprocess.run(
                 ["cargo", "run", "--quiet", "--", "init", "--agent", "hermes"],
@@ -324,19 +348,15 @@ class InstalledRtkRewritePluginTest(unittest.TestCase):
                 timeout=300,
             )
 
-            self.assertEqual(
-                0,
-                result.returncode,
-                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
-            )
+            self.assertEqual(0, result.returncode, msg=safe_process_message(result))
 
-            plugin_dir = home_path / ".hermes" / "plugins" / "rtk-rewrite"
+            plugin_dir = home_path / ".hermes" / "plugins" / "zap-rewrite"
             init_path = plugin_dir / "__init__.py"
             manifest_path = plugin_dir / "plugin.yaml"
             self.assertTrue(init_path.exists(), "installed plugin __init__.py must exist")
             self.assertTrue(manifest_path.exists(), "installed plugin.yaml must exist")
 
-            module = load_plugin_module(init_path, "installed_rtk_rewrite_plugin")
+            module = load_plugin_module(init_path, "installed_zap_rewrite_plugin")
             ctx = FakeContext()
             with mock.patch.dict(os.environ, {"PATH": env["PATH"]}):
                 module.register(ctx)
@@ -345,7 +365,7 @@ class InstalledRtkRewritePluginTest(unittest.TestCase):
                 args = {"command": "git status"}
                 callback(tool_name="terminal", args=args)
 
-            self.assertEqual({"command": "rtk git status"}, args)
+            self.assertEqual({"command": "zap git status"}, args)
 
 
 if __name__ == "__main__":

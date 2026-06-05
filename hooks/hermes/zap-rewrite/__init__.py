@@ -1,6 +1,6 @@
-"""Hermes plugin adapter for RTK command rewriting.
+"""Hermes plugin adapter for ZAP command rewriting.
 
-All rewrite logic lives in RTK's Rust ``zap rewrite`` command; this module
+All rewrite logic lives in ZAP's Rust ``zap rewrite`` command; this module
 only bridges Hermes ``pre_tool_call`` payloads to that command and fails open.
 """
 
@@ -11,34 +11,34 @@ import sys
 
 ACCEPTED_REWRITE_RETURN_CODES = {0, 3}
 EXPECTED_PASSTHROUGH_RETURN_CODES = {1, 2}
-_rtk_available = None
-_rtk_missing_warned = False
+_zap_available = None
+_zap_missing_warned = False
 
 
 def register(ctx):
     """Register the Hermes pre-tool callback."""
-    if not _check_rtk():
+    if not _check_zap():
         return
 
     ctx.register_hook("pre_tool_call", _pre_tool_call)
 
 
-def _check_rtk():
-    """Return whether the rtk binary is in PATH, warning once when missing."""
-    global _rtk_available, _rtk_missing_warned
+def _check_zap():
+    """Return whether the zap binary is in PATH, warning once when missing."""
+    global _zap_available, _zap_missing_warned
 
-    if _rtk_available is None:
-        _rtk_available = shutil.which("rtk") is not None
+    if _zap_available is None:
+        _zap_available = shutil.which("zap") is not None
 
-    if not _rtk_available and not _rtk_missing_warned:
-        _warn("rtk binary not found in PATH; Hermes hook not registered")
-        _rtk_missing_warned = True
+    if not _zap_available and not _zap_missing_warned:
+        _warn("zap binary not found in PATH; Hermes hook not registered")
+        _zap_missing_warned = True
 
-    return _rtk_available
+    return _zap_available
 
 
 def _pre_tool_call(tool_name=None, args=None, **_kwargs):
-    """Rewrite mutable Hermes terminal command args when RTK provides a change."""
+    """Rewrite mutable Hermes terminal command args when ZAP provides a change."""
     try:
         if tool_name != "terminal" or not isinstance(args, dict):
             return
@@ -49,19 +49,19 @@ def _pre_tool_call(tool_name=None, args=None, **_kwargs):
 
         try:
             result = subprocess.run(
-                ["rtk", "rewrite", command],
+                ["zap", "rewrite", command],
                 shell=False,
                 timeout=2,
                 capture_output=True,
                 text=True,
             )
         except subprocess.TimeoutExpired:
-            _warn("rtk rewrite timed out")
+            _warn("zap rewrite timed out")
             return
 
         if result.returncode not in ACCEPTED_REWRITE_RETURN_CODES:
             if result.returncode not in EXPECTED_PASSTHROUGH_RETURN_CODES:
-                details = f"rtk rewrite failed with exit {result.returncode}"
+                details = f"zap rewrite failed with exit {result.returncode}"
                 stderr = result.stderr.strip()
                 if stderr:
                     details = f"{details}: {stderr}"
@@ -77,4 +77,4 @@ def _pre_tool_call(tool_name=None, args=None, **_kwargs):
 
 
 def _warn(message):
-    print(f"rtk: hermes plugin warning: {message}", file=sys.stderr)
+    print(f"zap: hermes plugin warning: {message}", file=sys.stderr)
