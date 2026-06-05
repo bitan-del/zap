@@ -58,6 +58,43 @@ def write_fake_zap(bin_dir):
     return fake_zap
 
 
+def build_isolated_cargo_env(home_path, fake_bin):
+    """Return the minimal environment needed for the installed-flow smoke test.
+
+    Keep the test independent from a contributor's personal shell/session env.
+    In particular, do not copy arbitrary variables such as usernames, local
+    service URLs, agent config paths, or API tokens into the subprocess.
+    """
+    env = {
+        "CARGO_TERM_COLOR": "never",
+        "HOME": str(home_path),
+        "ZAP_TELEMETRY_DISABLED": "1",
+    }
+
+    path_dirs = [str(fake_bin)]
+    for executable in ("cargo", "rustc", "rustup"):
+        executable_path = shutil.which(executable)
+        if executable_path:
+            path_dirs.append(str(Path(executable_path).parent))
+    path_dirs.extend(os.defpath.split(os.pathsep))
+    env["PATH"] = os.pathsep.join(dict.fromkeys(path_dirs))
+
+    for key in ("CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    env.setdefault("RUSTUP_TOOLCHAIN", "stable")
+    return env
+
+
+def safe_process_message(result):
+    stdout_lines = len(result.stdout.splitlines()) if result.stdout else 0
+    stderr_lines = len(result.stderr.splitlines()) if result.stderr else 0
+    return (
+        f"cargo init smoke test failed with exit {result.returncode} "
+        f"(stdout lines: {stdout_lines}, stderr lines: {stderr_lines})"
+    )
+
+
 class ZapRewritePluginTest(unittest.TestCase):
     def load_callback(self):
         module = load_plugin_module()
@@ -296,24 +333,11 @@ class InstalledZapRewritePluginTest(unittest.TestCase):
     def test_cargo_init_installs_importable_plugin_that_rewrites_with_fake_zap(self):
         repo_root = Path(__file__).resolve().parents[3]
         self.assertTrue((repo_root / "Cargo.toml").exists(), "repo_root must point at the repository root")
-        real_home = Path(os.path.expanduser("~"))
-
         with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as bin_dir:
             home_path = Path(home)
             fake_bin = Path(bin_dir)
             write_fake_zap(fake_bin)
-
-            env = os.environ.copy()
-            env["HOME"] = str(home_path)
-            env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
-            env["ZAP_TELEMETRY_DISABLED"] = "1"
-            env["CARGO_TERM_COLOR"] = "never"
-            env.setdefault("RUSTUP_TOOLCHAIN", "stable")
-            if "RUSTUP_HOME" not in env and (real_home / ".rustup").exists():
-                env["RUSTUP_HOME"] = str(real_home / ".rustup")
-            if "CARGO_HOME" not in env and (real_home / ".cargo").exists():
-                env["CARGO_HOME"] = str(real_home / ".cargo")
-            env.pop("ZAP_CLAUDE_DIR", None)
+            env = build_isolated_cargo_env(home_path, fake_bin)
 
             result = subprocess.run(
                 ["cargo", "run", "--quiet", "--", "init", "--agent", "hermes"],
@@ -324,11 +348,7 @@ class InstalledZapRewritePluginTest(unittest.TestCase):
                 timeout=300,
             )
 
-            self.assertEqual(
-                0,
-                result.returncode,
-                msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
-            )
+            self.assertEqual(0, result.returncode, msg=safe_process_message(result))
 
             plugin_dir = home_path / ".hermes" / "plugins" / "zap-rewrite"
             init_path = plugin_dir / "__init__.py"
